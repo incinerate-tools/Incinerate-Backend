@@ -9,6 +9,7 @@ const Ddos = require('ddos');
 const get_ip = require('ipware')().get_ip;
 const helmet = require('helmet');
 const redis = require("redis");
+const { env } = require('process');
 
 const schema = Joi.object({
     file: Joi
@@ -33,15 +34,20 @@ const fileStoragePath = process.env.STORAGE || "/tmp/"
 const port = process.env.PORT || 443;
 const httpPort = process.env.HTTP_PORT || 80;
 const fileTypes = ['png', 'jpg', 'heic', 'gif', 'm4a', 'mp4', 'tif', 'mp2', 'mp3', 'docx', 'pptx', 'xlsx', 'bmp', 'ogg', 'wav', 'avi', 'wmv', 'jpeg']
-const privateKey  = require('fs').readFileSync('./certificates/privkey.pem', 'utf8');
-const certificate = require('fs').readFileSync('./certificates/cert.pem', 'utf8');
-const ca = require('fs').readFileSync('./certificates/chain.pem');
-const credentials = {key: privateKey, cert: certificate, ca: ca}
 const ddos = new Ddos({burst: 15, limit: 30, whitelist: ['172.17.0.1']})
-const client = redis.createClient({host: '172.17.0.1', port: '6379'});
+if(process.env.PROD != undefined){
+    var privateKey = require('fs').readFileSync('./certificates/privkey.pem', 'utf8');
+    var certificate = require('fs').readFileSync('./certificates/cert.pem', 'utf8');
+    var ca = require('fs').readFileSync('./certificates/chain.pem');
+    var credentials = {key: privateKey, cert: certificate, ca: ca}
+    var client = redis.createClient({host: '172.17.0.1', port: '6379'});
+
+    app.use(redirectToHTTPS([/3mghupyalwu7gub3ncpe3tcynf54y2bliylnh6gbslrlib4liwsqlgyd\.onion/], []))
+}else{
+    var client = redis.createClient({host: '127.0.0.1', port: '6379'});
+}
 
 app.use(ddos.express)
-app.use(redirectToHTTPS([/3mghupyalwu7gub3ncpe3tcynf54y2bliylnh6gbslrlib4liwsqlgyd\.onion/], []))
 app.use(helmet({
     contentSecurityPolicy: false
 }));
@@ -77,6 +83,10 @@ app.use((req, res, next) => {
 })
 app.use(bodyParser.raw(bodyParserOptions));
 app.use((req, res, next) => {
+    if(req.originalUrl.charAt(65) != ''){
+        res.socket.destroy();
+    }
+
     let byteSize = 0;
     let jsonData = ''
 
@@ -115,7 +125,35 @@ app.get('/', (req, res) => {
 })
 
 app.get('/download/:file', (req, res) => {
-    res.download(fileStoragePath + req.params.file);
+    let safeFileName = req.params.file.replace(/^(\.\.(\/|\\|$))+/, '');
+    let requestedFile = fileStoragePath + safeFileName;
+
+    if(require('fs').existsSync(requestedFile)){
+        let downloadingFile = fileStoragePath + "downloading" + safeFileName;
+
+        require('fs').copyFileSync(requestedFile, downloadingFile);
+        require('fs').unlinkSync(requestedFile);
+
+        let fileStream = require('fs').createReadStream(downloadingFile);
+
+        let maxDownloadTimeout = setTimeout(() => {
+            try{
+                require('fs').unlinkSync(downloadingFile);
+                res.json({status: 'MAX_DOWNLOAD_TIME'})
+                fileStream.destroy();
+            }catch{}
+        }, 2100000);
+
+        fileStream.pipe(res).on('finish', () => {
+            clearTimeout(maxDownloadTimeout);
+            fileStream.destroy();
+            try{
+                require('fs').unlinkSync(downloadingFile);
+            }catch{}
+        })
+    }else{
+        res.json({ status: 'FILE_NOT_EXIST' })
+    }
 })
 
 app.post('/api/strip', (req, res) => {
@@ -155,9 +193,11 @@ app.post('/api/strip', (req, res) => {
 
 app.get('*', (req, res) => {res.redirect('/')})
 
-require('https').createServer(credentials, app).listen(port, () => {
-    console.log(`HTTPS app listening on PORT ${port}`)
-})
+if(process.env.PROD != undefined){
+    require('https').createServer(credentials, app).listen(port, () => {
+        console.log(`HTTPS app listening on PORT ${port}`)
+    })
+}
 
 app.listen(httpPort, () => {
     console.log(`HTTP listening on PORT ${httpPort}`)

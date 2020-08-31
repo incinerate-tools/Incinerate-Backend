@@ -1,0 +1,22 @@
+{
+  "name": "incinerate",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "pm2-runtime src/index.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "ddos": "^0.2.1",
+    "express": "^4.17.1",
+    "express-http-to-https": "^1.1.4",
+    "file-type": "^15.0.0",
+    "helmet": "^4.1.0",
+    "ipware": "^2.0.0",
+    "joi": "^17.2.1",
+    "node-cmd": "^3.0.0",
+    "randomstring": "^1.1.5",
+    "redis": "^3.0.2"
+  }
+}

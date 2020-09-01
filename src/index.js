@@ -9,7 +9,6 @@ const Ddos = require('ddos');
 const get_ip = require('ipware')().get_ip;
 const helmet = require('helmet');
 const redis = require("redis");
-const { env } = require('process');
 
 const schema = Joi.object({
     file: Joi
@@ -30,11 +29,13 @@ const bodyParserOptions = {
     type: 'application/octet-stream'
 }
 
-const fileStoragePath = process.env.STORAGE || "/tmp/"
 const port = process.env.PORT || 443;
 const httpPort = process.env.HTTP_PORT || 80;
-const fileTypes = ['png', 'jpg', 'heic', 'gif', 'm4a', 'mp4', 'tif', 'mp2', 'mp3', 'docx', 'pptx', 'xlsx', 'bmp', 'ogg', 'wav', 'avi', 'wmv', 'jpeg']
+const fileStoragePath = process.env.STORAGE || "/tmp/"
 const ddos = new Ddos({burst: 15, limit: 30, whitelist: ['172.17.0.1']})
+const fileTypes = ['png', 'jpg', 'heic', 'gif', 'm4a', 'mp4', 'tif', 'mp2', 'mp3', 'docx', 'pptx', 'xlsx', 'bmp', 'ogg', 'wav', 'avi', 'wmv', 'jpeg']
+app.use(ddos.express)
+
 if(process.env.PROD != undefined){
     var privateKey = require('fs').readFileSync('./certificates/privkey.pem', 'utf8');
     var certificate = require('fs').readFileSync('./certificates/cert.pem', 'utf8');
@@ -47,10 +48,7 @@ if(process.env.PROD != undefined){
     var client = redis.createClient({host: '127.0.0.1', port: '6379'});
 }
 
-app.use(ddos.express)
-app.use(helmet({
-    contentSecurityPolicy: false
-}));
+app.use(helmet({contentSecurityPolicy: false}));
 app.use((req, res, next) => {
     if(req.method == 'POST' && req.originalUrl == '/api/strip'){
         let ip = get_ip(req).clientIp
@@ -198,7 +196,6 @@ if(process.env.PROD != undefined){
         console.log(`HTTPS app listening on PORT ${port}`)
     })
 }
-
 app.listen(httpPort, () => {
     console.log(`HTTP listening on PORT ${httpPort}`)
 })

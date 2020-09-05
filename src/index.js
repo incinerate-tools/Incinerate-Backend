@@ -133,21 +133,27 @@ app.get('/download/:file', (req, res) => {
         require('fs').unlinkSync(requestedFile);
 
         let fileStream = require('fs').createReadStream(downloadingFile);
+        FileType.fromFile(downloadingFile).then((result) => {
+            let mime = result.mime;
 
-        let maxDownloadTimeout = setTimeout(() => {
-            try{
-                require('fs').unlinkSync(downloadingFile);
-                res.json({status: 'MAX_DOWNLOAD_TIME'})
+            res.setHeader('Content-disposition', 'attachment; filename=' + safeFileName);
+            res.setHeader('Content-type', mime);
+
+            let maxDownloadTimeout = setTimeout(() => {
+                try{
+                    require('fs').unlinkSync(downloadingFile);
+                    res.json({status: 'MAX_DOWNLOAD_TIME'})
+                    fileStream.destroy();
+                }catch{}
+            }, 2100000);
+
+            fileStream.pipe(res).on('finish', () => {
+                clearTimeout(maxDownloadTimeout);
                 fileStream.destroy();
-            }catch{}
-        }, 2100000);
-
-        fileStream.pipe(res).on('finish', () => {
-            clearTimeout(maxDownloadTimeout);
-            fileStream.destroy();
-            try{
-                require('fs').unlinkSync(downloadingFile);
-            }catch{}
+                try{
+                    require('fs').unlinkSync(downloadingFile);
+                }catch{}
+            })
         })
     }else{
         res.json({ status: 'FILE_NOT_EXIST' })
